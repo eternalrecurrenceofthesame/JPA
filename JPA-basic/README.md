@@ -171,3 +171,185 @@ enum 을 매핑할 때는 항상 STRING 값을 사용해야 한다. 그렇지 �
 ```
 날짜를 매핑할 때 사용하는데 LocalDate, LocalDateTime 을 사용하면 생략할 수 있다 (한마디로 안 쓴다는 의미)
 ```
+# 연관 관계 매핑 기초
+
+객체를 테이블에 맞춰서 테이블 클래스를 만들면 값을 찾을 때 각각의 테이블별로 값을 조회해야 한다. (참조를 사용할 수없음)
+
+JPA 는 애노테이션을 사용해서 객체는 객체대로 만들고, 테이블은 테이블대로 만들어서 참조를 사용할 수 있게 해준다.
+
+## 단방향 연관 관계
+```
+@Entity 
+public class Member{
+
+@ManyToOne
+@JoinColumn(name = "TEAM_ID") // 테이블의 외래키 값
+private Team team; // Team 클래스가 있다고 가정함.}
+```
+```
+Team team = new Team("TeamA"); em.persist(team);
+Member member = new Member("member1"); em.persist(member);
+
+member.setTeam(team); // 단방향 연관 관계만 설정한다. (멤버만 팀을 조회할 수 있음)
+
+Member findMember = em.find(Member.class, member.getId());
+findMember.getTeam(); // 연관관계 매핑시 객체 그래프를 탐색할 수 있다. 
+```
+## 양방향 연관 관계
+```
+@Entity 
+public class Member{
+
+@ManyToOne
+@JoinColumn(name = "TEAM_ID") // 테이블의 외래키 값
+private Team team; // Team 클래스가 있다고 가정함.}
+```
+```
+@Entity
+public class Team{
+...
+@OneToMany(mappedBy = "team") // 멤버의 팀 필드를 가리킴
+List<Member> members = new ArrayList<Member>(); // 필드에서 바로 초기화 한다. }
+
+양방향으로 매핑하면 반대 방향에서도 객체 그래프를 탐색할 수 있다.
+
+Team findTeam = em.find(Team.class, team.getId());
+findTeam.getMembers().getSize(); // 역방향 조회! 
+```
+### 양방향 연관 관계 매핑 상세
+```
+양방향 연관 관계에서는 연관 관계의 주인을 설정해야 하며 **외래키** 가 있는 곳이 연관 관계의 주인이 된다. 
+연관 관계의 주인만이 외래키를 관리할 수 있다(등록, 수정)
+
+연관 관계의 주인이 아니면 mappedBy 속성을 사용해서 연관 관계의 주인을 지정해줘야 하며 조회만 가능
+```
+```
+* 양방향 매핑시 주의할 점
+
+앞서 설명했다시피 연관관계의 주인만 등록과 수정이 가능하다 즉 연관 관계의 주인에서 값을 수정해야 연관 관계로
+매핑된다. 순수 객체관계를 고려해서 주인 쪽에서 연관 객체를 등록할 때 연관 관계 편의 메서드를 만들어서 사용할 수도 있다.
+
+team.setMember(member); (x)
+member.setTeam(team); (o)
+
+또한 양방향 매핑시 무한 참조를 조심해야 한다. ex) toString(), lombko, json 생성 라이브러리 
+```
+# 다양한 연관 관계 매핑
+```
+* 단방향과 양방향의 개념에 대해서
+
+테이블의 경우 외래 키 하나로 양쪽으로 조인할 수 있다. (방향이라는 개념이 없음)
+
+객체는 참조용 필드가 있는 쪽으로만 탐색 할 수 있다. 이때 한쪽만 참조하는 경우 단방향, 양쪽이 서로 참조하면 양방향이 된다.
+(앞서 만든 Member, Team 관계 참고!) 
+```
+```
+* 연관 관계의 주인 
+
+주인은 앞서 설명했지만 외래키를 관리하는 엔티티가 연관 관계의 주인이 된다. 그리고 주인의 반대편은 외래키에 영향을
+주지 않고 단순한 조회만 가능하다.
+
+데이터베이스 설계상 외래키는 항상 다 쪽으로 간다는 것을 기억하자 !! 
+```
+## @Many(주인)ToOne 
+```
+연관 관계 주인 엔티티와 외래키 테이블이 일치하는 관계이다. 보편적으로 가장 많이 사용한다. 앞서 설명한 
+Member 와 Team 의 관계로써 단방향 양방향 모두 무난한 관계임
+```
+## @One(주인)ToMany
+```
+연관 관계의 주인과 외래키 테이블이 일치하지 않는 관계로 이 모델은 권장하지 않는다. 다대 일로 풀어나가야 한다. 
+
+@Entity
+public class Team{
+...
+@OneToMany
+@JoinColumn(name = "TEAM_ID")
+private List<Member> members = new ArrayList<Member>(); 
+...}
+
+@Entity
+public class Member{
+...
+@ManyToOne
+@JoinColumn(name = "TEAM_ID" , insertable = false, updateable = flase) // 양방향 설정시 사용한다.
+private Team team 
+...}
+
+일대 다 관계를 사용할 때는 연관 관계의 주인이 되는 Team 에서 데이터 베이스의 pk 값인 TEAM_ID 와 매핑해야하는데
+이때 @JoinColumn 을 꼭 사용해줘야 한다 그렇지 않으면 조인 테이블 방식?? 을 사용해서 새로운 테이블을 만들어 버린다.
+
+또한 양방향 관계를 만들때는 Member 클래스의 Team 을 테이블의 외래키와 매핑한 후 insert, update 를 false 로 지정해서
+조회만 가능하게끔 해줘야 한다. (***애초에 일대 다 양방향 매핑은 존재 하지 않는다***)
+
+*** 결론: 항상 다대 일 관계로 풀어나가야한다. ***
+```
+## @OneToOne
+```
+```
+## @ManyToMany
+
+관계형 데이터베이스는 정규화된 테이블 2 개로 다대다 관계를 표현할 수 없다. 연결 테이블을 만들어줘야 한다. 
+
+반대로 객체 세상에서는 각 클래스에 컬렉션을 만들어서 다대다 관계를 쉽게 풀어갈 수 있다. 
+
+### @ManyToMany 연결 테이블 사용 매핑
+```
+* 다대다 단방향 매핑
+
+@ManyToMany
+@JoinTable(name = "MEMBER_PRODUCT", // 데이터베이스의 연결 테이블
+           joinColumns = @JoinColumn(name = "MEMBER_ID"), // 회원과 매핑할 연결 테이블 정보
+           inverseJoinColumns = @JoinColumn(name = "PRODUCT_ID")) // 반대 방향인 상품과 매핑할 컬럼 정보
+private List<Product> products new ArrayList<Product>();
+```
+```
+* 다대다 양방향 매핑
+
+@ManyToMany(mappedBy = "products") // 역방향 추가
+private List<Member> members;
+
+Product product = em.find(Product.class, "productA");
+product.getMembers(); // 객체 그래프 탐색 
+```
+연결 테이블을 사용하면 편리하지만 실무에서 사용하면 안 된다 연결 테이블이 단순히 연결만하고 끝나면 상관 없지만 보통
+
+연결만 하고 끝나지 않는다. 주문 시간이나, 주문 수량과 같은 다른 데이터가 필요할 수 있다.
+
+### @ManyToMany 는 @ManyToOne 관계로 풀어나가야 한다! 
+```
+* 중간 테이블 역할을 하는 엔티티 예시
+
+@Entity
+public class Order{
+
+@Id @GeneratedValue
+@Column(name = "order_id") // 중간 테이블을 식별하는 기본키 
+private Long id;
+
+@ManyToOne
+@JoinColumn(name = "member_id")
+private Member member;
+
+@ManyToOne
+@JoinColumn(name = "product_id")
+private Product product;
+...
+}
+```
+```
+* Member
+
+@OneToMany(mappedBy = "member")
+private List<Order> orders = new ArrayList<Order>();
+
+상품은 단방향으로 만듦 상품에서 주문을 조회할 일은 없다! 비즈니스 규칙에 따라 유동적으로 만들면 된다.
+```
+```
+위에서 만든 것 처럼 중간 테이블을 엔티티로 만들고 @ManyToOne 관계 풀어나가면 비즈니스 요구사항으로 테이블의 칼럼이 
+추가되더라도 손쉽게 엔티티를 변경할 수 있다.
+
+Order order = em.find(Order.class, orderId);
+order.getMember(); 
+```
+# 고급 매핑 
