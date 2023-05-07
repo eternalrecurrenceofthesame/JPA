@@ -592,3 +592,122 @@ CascadeType.All 에서 em.remove(parent); 을 하면 엔티티도 모두 삭제�
 
 도메인 주도 설계(DDD)의 Aggregate Root개념을 구현할 때 유용하다.
 ```
+
+# 값 타입
+
+## 기본 값 타입
+```
+int,double,boolean,byte 같은 기본 타입과 Stirng, Integer 같은 래퍼 클래스, String 이 있다. 기본 값타입이나
+래퍼 타입은 서로 공유되지 않는다. 
+
+int a = 1;
+int b = 2;
+
+int a = b;  // a = 2, b = 2 
+int a = 3;  // a = 3, b = 2 값 타입은 값을 대입하면 값 자체가 복사됨. 인스턴스는 대입하면 인스턴스의 주소값이 서로 공유된다.
+
+값 타입은 식별자가 없고 값만 있어서 변경시 추적할 수 없고 생명 주기를 엔티티에 의존한다. 
+```
+## 임베디드 타입(복합 값 타입)
+```
+새로운 값 타입을 직접 정의하는 것을 JPA 는 임베디드 타입이라 한다. 주로 기본 값 타입을 모아서 복합 값 타입이라고 말함.
+임베디드 타입을 사용하면 도메인 주도 설계에서 애그리거트 간 경계를 명확하게 할 수 있다.
+```
+```
+* 값 타입 예시
+
+Member Entity
+
+Long id 
+String name 
+Period workPeriod    // Period (startDate, endDate) 
+Address homeAddress  // Address (city, street, zipcode)
+
+값 타입을 사용하면 애플리케이션의 유지 보수성과 응집도를 높일 수 있고 
+Period.isWork() 처럼 해당 값 타입만 사용하는 의미 있는 메서드를 만들 수 있다. 
+
+임베디드 타입을 포함한 모든 값 타입은 값 타입을 소유한 엔티티에 생명 주기를 의존한다. 
+```
+### 임베디드 타입 사용하기
+```
+@Embeddable: 값 타입을 정의하는 곳에 표시
+@Embedded: 값 타입을 사용하는 곳에 표시
+```
+```
+@Entity
+public class Member {
+
+@Embedded Address address;
+@Embedded PhonNumber phonNumber;
+
+@Embeddable
+public class Address{
+String street;
+String city;
+String state;
+@Embedded Zipcode zipcode;} // 값 타입 내부에서도 값 타입을 사용할 수 있다.
+
+@Embeddable
+public class Zipcode{
+String zip;
+String plusFour;}
+
+@Embedable
+public class PhonNumber{
+String areaCode;
+String localNumber;
+@ManyToOne PhoneServiceProvider provider;} // 엔티티참조를 값 타입에서 사용가능
+
+참고로 값 타입에서는 기본 생성자를 필수로 만들어야 한다. 
+
+값 타입을 null 로 만들면 입력 필드 값이 모두 null 값으로 된다.
+member.setASddress(null); // 모두 null 로 반영
+```
+### @AttributeOverride 를 사용해서 값 타임 칼럼 값 매핑 재정의 하기
+```
+@Embedded
+@AttributeOverrides({
+  @AttributeOverride(name="city", column=@Column(name = "company_city")),
+  @AttributeOverride(name="street", column=@Column(name = "company_street")),
+  @AttributeOverride(name="zipcode", column=@Column(name = "company_zipcode:"))})
+Address companyAddress;
+
+위에서 예시한 주소를 회사 주소로 사용하고 싶다면 컬럼 값과 필드를 직접 오버라이드해서 매핑할 수도 있다!
+```
+### 값 타입과 불변 객체
+```
+값 타입의 필드값 들은 기본 타입이기 때문에 서로 공유되지 않지만, 값 타입 자체는 인스턴스로 만들어지면 공유될 수 있다! 
+(엔티티에서 컬럼값들이 공유되는 무시무시한 상황)
+
+이런 경우를 방지하기 위해 값 타입은 불변 객체로 만들어야한다. 값 타입은 단독으로는 사용되지 않음! 
+(불변 객체란? 생성 시점 이후 절대 변경할 수 없는 객체를 의미한다)
+```
+```
+* 값 타입 불변 객체 만들기
+
+불변 객체를 만드는 가장 간단한 방법은 생성자로만 값을 설정하게 하고 수정자를 만들지 않으면 된다.
+
+@Embeddable
+public class Address{
+
+private String city;   // private 으로 만들어서 클래스 내부에서만 사용할 수 있게 한다. 
+protected Address() {} // protected 동일 패키지의 모든 클래스와, 다른 패키지의 자식 클래스에서 사용 
+
+public Address(String city) {this.city = city} // 값을 생성할 때 생성자로 매개변수를 주입한다.
+Getter 만 만들고 Setter 는 노출하지 않는다.}
+```
+```
+* 불변 객체 사용
+
+Address address = member1.getHomeAddress();
+Address new Address = new Address(address.getCity());
+
+member2.createHomeAddress(newAddress); // 인스턴스의 주소값을 공유하지 않고 새로운 인스턴스를 사용한다.
+```
+### 값 타입을 서로 비교하기
+```
+값 타입 내부의 값을 서로 비교하려면 동일성 비교( == ) 가 아닌 인스턴스의 값을 서로 비교하는 동등성 비교 a.equalas(b)
+를 사용한다. 값 타입 클래스를 구현할 때 equals, hashcode 를 적절하게 재정의하자! 
+```
+## 값 타입 컬렉션
+
