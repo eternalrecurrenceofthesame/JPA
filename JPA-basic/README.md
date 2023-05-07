@@ -489,3 +489,75 @@ public class Member extends BaseEntity{
 private String email;
 }
 ```
+# 프록시와 연관 관계 관리 
+
+멤버와 팀의 다대 일 관계에서 멤버를 조회할 때 회원 정보를 항상 조회해야 할까? 반대의 경우 팀을 조회할 때 멤버를 같이 
+
+조회해야 하는지에 대한 논의! 
+
+## 프록시 조회하기
+```
+em.find() 대신 em.getReference() 를 사용하면 데이터베이스에서 프록시 엔티티를 조회할 수 있다. 
+
+Member member = em.getReferecne(Member.class, "id1");
+member.getName();
+
+프록시는 실제 클래스를 상속받아서 만들어지고 실제 객체의 참조를 보관한다. 프록시 객체를 초기화해도 
+프록시 객체가 실제 엔티티로 바뀌는 것이 아니다. 프록시 객체를 통해서 실제 엔티티에 접근할 수 있다.
+
+프록시 객체는 타입 체크시 == 대신 instance of 를 사용한다.
+영속성 컨텍스트에 찾는 엔티티가 있으면 프록시를 호출해도 실제 엔티티를 반환한다. 
+```
+
+## 즉시 로딩과 지연 로딩
+
+프록시 객체는 주로 연관된 엔티티를 지연 로딩할 때 사용한다! 
+
+### 지연 로딩 을 사용해서 연관 객체를 프록시로 조회하기
+```
+@ManyToOne(fetch = FetchType.LAZY) // 지연 로딩 
+@JoinColumn(name = "team_id")
+private Team team; 
+
+
+Team team = memger.getTeam();
+team.getName(); 
+실제 team 을 사용하는 시점에 데이터베이스에 쿼리한다.
+```
+```
+멤버와 팀을 자주 함께 사용하는 경우 즉시로딩으로 값을 한번에 가지고 올 수도 있다 하지만 가급적
+지연로딩을 사용해야 한다(특히 실무의 경우)
+
+즉시로딩을 사용하면 연관 객체를 조회하면서 N + 1 의 문제가 발생할 수 있다. 연관된 객체를 모두 조회하기 때문에
+한번의 쿼리로 N 번의 쿼리가 발생하고 성능 문제로 이어진다. 
+
+@ManyToOne, @OneToOne 은 기본이 즉시로딩이므로 항상 LAZY 로딩으로 설정하자! // toMany 관계는 기본이 지연 로딩.
+```
+
+## 영속성 전이:CASCADE
+
+특정 엔티티를 영속 엔티티로 만들 때 연관 엔티티도 함께 영속 상태로 만들면 싶다면 CASCADE 설정을 사용하면 된다.
+
+```
+* CASCADE - (ALL, PERSIST, MERGE, REMOVE, REFRESH, DETACH)
+
+@OneToMany(mappedBy = "parent", cascade=CascadeType.Persist)
+private List<Child> children = new ArrayList<Child>();
+
+child1.setParent(parent);  parent.getChildren.add(child1);
+child2.setParent(parent);  parent.getChildren.add(child2);
+
+em.persist(parent);
+연관 관계를 설정하고 부모 객체만 영속성 상태로 만들면 관련된 자식 객체도 영속성 상태가 된다.
+(간단하게 생각하면 ToOne 만 em.persist 해주면 됨)
+
+
+Parent findParent = em.find(Parent.class, 1L);
+em.remove(findParent); 
+(엔티티를 조회하고 ToOne 관계를 삭제하면 연관된 컬렉션도 모두 삭제된다!)
+
+참고로 PERSIST, REMOVE 는 em.persist(), em.remove() 를 실행할 때 바로 전이가 발생하지 않고 플러시를 호출할 때 
+전이가 발생한다. 
+```
+
+## 고아 객체
