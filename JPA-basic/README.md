@@ -285,7 +285,40 @@ private Team team
 *** 결론: 항상 다대 일 관계로 풀어나가야한다. ***
 ```
 ## @OneToOne
+
+### 주 테이블에 외래키가 있는 경우
 ```
+* 단방향
+
+Member(테이블의 외래키와 매핑되는 엔티티)
+
+@OneToOne
+@JoinColumn(name = "locker_id") // 다대일처럼 간단하게 매핑해주면 된다.
+private Locker locker;  // 데이터베이스 locker_id 에 유니크 제약 조건을 추가한다.   
+```
+```
+* 양방향 
+
+Product
+
+@OneToOne(mappedBy = "locker"
+private Member member; // 마찬가지로 다대일처럼 간단하게 매핑한다. 
+```
+### 대상 테이블에 외래키가 있는 경우
+```
+* 양방향
+
+Member 
+
+@OneToOne(mappedBy = "member")
+private Locker locker;
+
+Locker 
+
+@OneToOne @JoinColumn(anme = "member_id")
+private Member member; 
+
+다대일과 똑같다. 일대일 관계는 대상 테이블에 외래키가 있는 **단방향 관계**를 허용하지 않는다. 
 ```
 ## @ManyToMany
 
@@ -353,3 +386,106 @@ Order order = em.find(Order.class, orderId);
 order.getMember(); 
 ```
 # 고급 매핑 
+
+## 상속 관계 매핑
+
+대분류로 아이템을 만들고 이를 상속하는 구체적인 아이템을 만들어서 공통으로 사용되는 정보를 한곳에서 관리할 수 있다. 
+
+### 조인 전략 매핑
+```
+* Item
+
+@Entity
+@Inheritance(strategy = InheritenceType.JOINED) // 조인 전략 사용 
+@DiscriminatorColumn(name = "dtype") // 구분 칼럼 지정, 칼럼 값으로 들어가게됨.
+public abstract class Item{
+
+@Id @GeneratedValue
+@Column(name = "item_id")
+private Long id;
+
+private String name; // 이름
+private int price;  // 가격 
+}
+
+아이템 추상 클래스를 상속받으면 이름과 가격 아이디값을 공통으로 사용할 수 있다. 
+```
+```
+* Book
+
+@Entity
+@DiscriminatorValue("b")
+@PrimaryKeyJoinColumn(name = "book_id") // ID 값을 재정의 할 수 있다.
+public class Book extends Item
+
+private String author;
+private String isbn;
+
+책에서 필요한 구체적인 필드값들을 정의한다! 
+```
+```
+조인 매핑 전략을 사용하면 클래스의 응집성을 높이면서 유지보수가 용이한 상속 클래스들을 만들 수 있다.
+하지만 조회할 때 조인이 많이 사용되므로 성능이 저하되고 조회 쿼리가 복잡하며 
+
+데이터를 등록할 때 INSERT SQL 을 두 번 실행한다는 단점이 있다. 
+```
+### 단일 테이블 전략
+
+단일 테이블 전략은 조인과 다르게 하나의 테이블에 책,앨범,영화 정보를 모두 구현하는 전략이다.
+
+```
+@Entity
+@Inheritance(strategy = InheritanceType.SINGLE_TABLE)
+@DiscriminatorColumn(name = "DTYPE")
+public absatract class Item{
+
+@Id @GeneratedValue
+@Column(name = "item_id")
+private Long id;
+
+private String name;
+private int price;  // 공통 정보
+}
+
+@Entity
+@DiscriminatorValue("A")
+public class Album extends Item {...}
+```
+```
+단일 테이블 전략을 사용하면 조인이 필요없고 조회 쿼리가 단순해지지만 사용하지 않는 칼럼의 경우 null 값을 허용해야한다.
+테이블이 비대해지면 상황에 따라서 조회 성능이 느려질 수 있고 구분 컬럼을 꼭 사용해야 한다. 
+
+조인 전략의 경우 구현체에 따라서 구분 컬럼 없이도 동작한다. @DiscriminatorColumn
+
+개인적으로는 조인 전략이 훨씬 깔끔한 것 같다. 
+```
+
+## @MappedSuperclass
+
+공통의 매핑 정보가 필요할 때 사용한다.
+
+```
+앞서 설명한 상속 관계가 아니며 엔티티가 아니기 때문에 테이블과 매핑되지 않는다. 부모 클래스를 상속 받는 
+자식 클래스에 매핑되는 정보만 제공한다 직접 생성해서 사용할 일이 없으므로 추상 클래스로 만들자!
+
+엔티티가 사용하는 공총 매핑 정보를 한곳에 모으고 클래스의 응집성과 유지보수성을 높일 수 있다.
+주로 등록일, 수정일, 등록자, 수정자 같은 전체 엔티티에서 공통으로 적용하는 정보들!
+
+참고로 @Entity 클래스는 엔티티나 @MappedSuperclass 로 지정한 클래스만 상속할 수 있다.
+```
+```
+@MappedSuperclass
+public abstract class BaseEntity{
+
+@Id @GeneratedValue
+private Long id;
+private Stirng name;
+...}
+
+@Entity
+public class Member extends BaseEntity{
+
+//ID, NAME 값을 상속 받는다. 
+private String email;
+}
+```
