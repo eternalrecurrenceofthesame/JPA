@@ -561,3 +561,34 @@ em.remove(findParent);
 ```
 
 ## 고아 객체
+
+고아 객체란 부모(One) 엔티티와 연관이 끊어진 자식(Many) 엔티티를 자동으로 삭제하는 기능을 말한다.
+
+```
+@OneToMany(mappedBy = "parent", orphanRemoval = true) // 고아 객체 설정
+private List<Child> children = new ArrayList<>();
+
+Parent parent1 = em.find(Parent.class, id);
+parent1.getChildren().remove(0);
+
+자식엔티티를 컬렉션에서 제거하면 자동으로 삭제된다.
+```
+```
+* 주의점
+
+참조가 제거된 엔티티는 다른 곳에서 참조하지 않는 것으로 가정한다. 즉 참조하는 곳이 하나일 때 사용할 수 있다.
+@OneToOne, @OneToMany 관계의 One 에서만 가능하다.
+
+참고로 고아 객체에서 부모를 제거하면 자식은 고아가 된다. 따라서 OrphanRemoval 을 활성화 하면, 부모를 제거할 때 
+자식도 함께 제거된다. 마치 CascadeType.REMOVE 처럼 동작한다.
+```
+```
+* CascadeType.ALL + orphanRemovel = true 조합으로 사용하기
+
+두 가지 옵션을 모두 활성화 하면 부모 엔티티로 자식의 생명 주기를 관리할 수 있다. 
+
+CascadeType.All 에서 em.remove(parent); 을 하면 엔티티도 모두 삭제되는 기능 + parent1.getChildren().remove(0); 컬렉션 객체 
+그래프로 자식 엔티티를 삭제하는 기능도 추가된 형태.
+
+도메인 주도 설계(DDD)의 Aggregate Root개념을 구현할 때 유용하다.
+```
