@@ -711,3 +711,67 @@ member2.createHomeAddress(newAddress); // 인스턴스의 주소값을 공유하
 ```
 ## 값 타입 컬렉션
 
+데이터 베이스에는 컬렉션의 개념이 없다. 데이터 베이스에 값 타입으로 매핑되는 컬럼들을 컬렉션처럼 저장하고 싶다면
+
+값 타입 컬렉션을 사용하면 된다. 
+
+### 값 타입 컬렉션 구현하기
+```
+* Member 
+
+@Id @GeneratedValue
+private Long id;
+
+@ElementCollection
+@CollectionTable(name = "favorite_foods", //값 타입 컬렉션 테이블과 매핑
+joinColumns=@JoinColumn(name="member_id"))//멤버 엔티티의 pk 값과 매핑 되는 컬럼으로 컬렉션 테이블에서(pk,fk) 가 된다. 
+@Column(name = "food_name")
+private Set<String> favoriteFoods = new HashSet<String>();
+
+
+@ElementCollection
+@CollectionTable(name = "address", 
+  joinColumns = @JoinColumn(name = "member_id"))
+private List<Address> addressHistory = new ArrayList<>();
+
+@CollectionTable 을 생략하면 기본값(엔티티이름_컬렉션 속성) 을 사용해서 테이블, 컬럼과 매핑한다. 335 p
+```
+### 값 타입 컬렉션 테이블 구현하기
+```
+값 타입 컬렉션을 사용하면 컬렉션을 저장하기 위한 별도의 테이블을 추가해야 한다. 값 타입 컬렉션을 저장하기 위한 
+컬렉션 테이블의 컬럼 값들은 모두 PK 값으로 구성하고 참조하는 엔티티의 PK 값을 (PK,FK) 로 가진다. 335 p, 339 p
+```
+### 값 타입 컬렉션 INSERT SQL 사용 예시
+```
+Member member = new Member();
+
+member.setHomeAddress(new Address("주소")); // 임베디드 값 타입
+
+member.getFavoriteFoods().add("짬뽕");
+member.getFavoriteFoods().add("짜장면");
+member.getFavoriteFoods().add("탕수육"); // 기본 값 타입 컬렉션 생성
+
+member.getAddressHistory().add(new Address("부산"));
+member.getAddressHistory().add(new Address("서울")); // 임베디드 값 타입의 컬렉션
+
+em.persist(member);
+
+이 예시에서는 member 만 영속화 시켰다. 값 타입 컬렉션을 사용하면 영속성 전이 + 고아 객체 제거 기능을 필수로 가진다. 
+(부모 객체(One)가 자식 객체(Many)를 완전하게 관리할 수 있음) 
+
+* 로직 실행시 실행되는 INSERT SQL
+
+member:INSERT SQL 1 번
+member.setHomeAddress: 컬렉션이 아닌 임베디드 값 타입은 엔티티를 저장할 때 sql 에 포함된다!
+
+member.favoriteFoods: INSERT SQL 3 번
+member.addressHistory: INSERT SQL 2 번
+
+총 6 번의 SQL 이 실행된다. (플러시 할 때 SQL 실행)
+```
+### 값 타입 컬렉션 SELECT SQL 사용 예시 
+```
+값 타입 컬렉션도 조회할 때 페치 전략을 사용할 수 있고 기본 값은 LAZY 이다.
+
+
+```
