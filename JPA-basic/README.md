@@ -531,7 +531,7 @@ team.getName();
 즉시로딩을 사용하면 연관 객체를 조회하면서 N + 1 의 문제가 발생할 수 있다. 연관된 객체를 모두 조회하기 때문에
 한번의 쿼리로 N 번의 쿼리가 발생하고 성능 문제로 이어진다. 
 
-@ManyToOne, @OneToOne 은 기본이 즉시로딩이므로 항상 LAZY 로딩으로 설정하자! // toMany 관계는 기본이 지연 로딩.
+@ManyToOne, @fOne 은 기본이 즉시로딩이므로 항상 LAZY 로딩으로 설정하자! // toMany 관계는 기본이 지연 로딩.
 ```
 
 ## 영속성 전이:CASCADE
@@ -771,7 +771,72 @@ member.addressHistory: INSERT SQL 2 번
 ```
 ### 값 타입 컬렉션 SELECT SQL 사용 예시 
 ```
-값 타입 컬렉션도 조회할 때 페치 전략을 사용할 수 있고 기본 값은 LAZY 이다.
+값 타입 컬렉션도 조회할 때 페치 전략을 사용할 수 있으며 기본 값은 LAZY 이다.
+@ElementCollection(fetch = FetchType.LAZY)
+
+* 지연로딩을 가정하고 SELECT 실행하는 예시
+
+Membmer member = em.find(Member.class, 1L); 
+Address homeAddress = member.getHomeAddress(); // 회원 엔티티를 조회하면서 임베디드 값타입도 함께 조회한다.
+
+member.getFavoriteFoods(); // LAZY
+for(String favoritedFood : favoriteFoods){
+System.out.println("favoriteFood = " + favoritedFood); } // LAZY 프록시 초기화
+
+List<Address> addressHistory = member.getAddressHistory(); // LAZY
+addressHistory.get(0); // LAZY 프록시 초기화 
+
+총 3 번의 SQL 이 실행된다.
+```
+### 값 타입 컬렉션 수정 예시
+```
+Memberm member = em.find(Member.class, 1L);
+
+member.setHomeAddress(new Address("새 주소")); // 값 타입은 불변 객체이므로 항상 새로 생성해야 한다.
+
+Set<String> favoriteFoods = member.getFavoriteFoods();
+favoriteFoods.remove("탕수육");
+favoriteFoods.add("치킨"); // 기본 값타입을 수정할 때는 기존의 값을 제거하고 추가해야한다. 
+                              자바의 String 은 수정 할 수 없다.
+                             
+List<Address> addressHistory = member.getAddressHistory();
+addressHistory.remove(new Address("기존 주소")); 
+addressHistory.add(new Address("새 주소")); // 값 타입은 불변해야 한다.
+
+**참고로 값 타입은 equals,hashcode 를 꼭 구현해야 한다!!**
+```
+## 값 타입 컬렉션의 제약사항
+```
+값 타입 컬렉션은 값을 변경할 때 추적할 수 없다. 엔티티는 값을 변경하려면 엔티티 식별자로 값을 조회하면 된다.
+하지만 값 타입 컬렉션은 테이블을 생성할 때 컬럼값들이 모두 PK 값이 되고 식별자라는 개념이 없다. 
+
+그렇기 때문에 값 타입 컬렉션은 데이터베이스에서 조회한 후 수정하고 싶은 값만 수정할 수 없다. 
+이런 메커니즘 때문에 JPA 는 값 타입 컬렉션의 수정이 발생하면 값 타입 테이블의 데이터를 모두 지우고 
+
+현재 값 타입 컬렉션 **객체**에 있는 모든 값을 데이터베이스에 다시 저장하는 어마어마한 일을 수행한다 ..
+(한마디로 값 타입 컬렉션 찾고 수정할 값만 수정하고 수정한 값 + 기존 컬렉션 값을 다시 저장한 객체를 만들어야 한다 339 P) 
+그리고 컬렉션의 값을 다시 한땀한땀 반영하기 때문에 그만큼의 SQL 이 발생함.
+```
+```
+* 값 타입 컬렉션에 매핑된 데이터가 많다면 일대 다 관계를 사용하라!
+
+@Entity
+public class AddressEntity{ // 값 타입 컬렉션을 엔티티로 만듦
+
+@Id @GeneratedValue
+private Long id;
+
+@Embedded Address address; // 단순 임베디드 타입 }
 
 
+@Entity
+public class Member{
+...
+@OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
+@JoinColumn(name = "member_id")
+private List<AddressEntity> addressHistory = new ArrayList<>();
+...}
+
+값 타입 컬렉션을 엔티티로 만들면 주 테이블과 대상 엔티티가 일치하지 않는 문제가 발생하기 때문에 부득이하게 
+OneToMnay 를 사용하고 값 타입 컬렉션이 가진 속성을 직접 만들어주면 된다.
 ```
