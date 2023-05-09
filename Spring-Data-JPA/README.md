@@ -12,8 +12,8 @@ public interface MemberRepository extends JpaRepository<Member, Long> // 엔티�
 ```
 ## 쿼리 메소드 기능
 ```
-쿼리 메소드는 스프링 데이터 JPA 가 제공하는 기능으로 메소드 이름만으로 쿼리를 생성하는 기능이다. 메소드 이름을 규칙에 따라 만들면 메소드 이름으로 
-적절한 JPQL 쿼리를 생성해서 실행한다. 
+쿼리 메소드는 스프링 데이터 JPA 가 제공하는 기능으로 메소드 이름만으로 쿼리를 생성하는 기능이다. 메소드 이름을 규칙에 따라 만들면 메소드
+이름으로 적절한 JPQL 쿼리를 생성해서 실행한다. 
 ```
 ```
 * 쿼리 메소드 기능 예시
@@ -53,4 +53,21 @@ public interface MemberRepository extends JpaReposiory<Member, Long>{
 List<Member> findByUsername(@Param("username") String username); }
 스프링 데이터 JPA 는 선언한 도메인 클래스.메소드 이름으로 Named 쿼리를 찾아서 실행한다.
 ```
+## @Query 사용하기
+```
+* JPQL 사용하기
+
+스프링 데이터 JPA 에서 쿼리 메소드 대신 @Query 를 사용하면 손쉽게 JPQL 을 사용할 수 있다.
+
+@Query("select m from Member m where m.username = :username)
+Member findByUsername(@Param(username) String username); // @Param 을 이용해서 파라미터 바인딩 적용.
+```
+```
+* 네이티브 SQL 사용하기
+
+@Query(value = "select * from member where username = :username",
+     nativeQuery = true)
+Member findByUsername(String username);
+```
+## 벌크성 수정 쿼리
 
