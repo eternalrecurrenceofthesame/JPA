@@ -1,12 +1,11 @@
 # Spring-Data
-
-스프링 데이터 프로젝트는 JPA, 몽고DB 등등 다양한 데이터 저장소에 대한 접근을 추상화 해서 개발자에 편의를 제공한다.  그 중 
-
+```
+스프링 데이터 프로젝트는 JPA, 몽고DB 등등 다양한 데이터 저장소에 대한 접근을 추상화 해서 개발자에 편의를 제공한다.  그중 
 스프링 데이터 JPA 는 JPA 에 특화된 기능을 제공한다. 
 
-스프링 데이터를 사용하면 반복적인 CRUD 를 작성하지 않고 데이터 접근 계층을 사용할 수 있다. 또한 데이터 접근 계층을 개발할 때 
-
-구현체 없이 인터페이스만 작성해도 된다! 540 p
+스프링 데이터를 사용하면 반복적인 CRUD 를 작성하지 않고 데이터 접근 계층을 사용할 수 있다. 또한 데이터 접근 계층을 개발할 때 구현체 없이
+인터페이스만 작성해도 된다! 540 p
+```
 ```
 * 스프링 데이터 JPA 예시
 
@@ -155,8 +154,162 @@ public interface MemberRepository extends JpaRepository<Member, Long>, MemberRep
 ```
 ### Auditing
 
-엔티티를 생성, 변경할 때 변경한 사람과 시간 추적하기. 
+스프링 데이터 JPA 를 사용해서 엔티티를 생성, 변경할 때 변경한 사람과 시간 추적하기. 
 ```
 @EnableJpaAuditing 을 부트스트랩 클래스에 설정한다.
 @EntityListeners(AuditingEntityListener.class) 엔티티에 적용
+
+* 사용 애노테이션
+
+@CreatedDate
+@LastModifiedDate
+@CreatedBy
+@LastModifiedBy
 ```
+```
+* 등록일 수정일 구현하기 
+
+@EntityListeners(AuditingEntityListener.class)
+@MappedSuperclass
+@Getter
+public class BaseTimeEntitiy{
+
+@CreatedDate
+@Column(updateable = false)
+private LocalDateTime createdDate;
+
+@LastModifiedDate
+private LocalDateTime lastModifiedDate;}
+```
+```
+* 등록자 수정자 구현하기
+
+@EntityListeners(AuditingEntityListener.class)
+@MappedSuperclass
+@Getter
+public class BaseEntity extends BaseTimeEntity{
+
+@CreatedBy
+@Column(updatable = false)
+private String createdBy;
+
+@LastModifiedBy
+private String lastModifiedBy;
+
+보통 등록일 수정일은 필요하지만 등록자 수정자는 필요 없는 경우가 있기 때문에 따로 분리해서 만들고 필요한 것을 
+상속해서 사용하면 된다. 
+```
+```
+* 등록자 수정자를 처리하는 AuditorAware 를 스프링 빈으로 등록
+
+@Bean
+public AuditorAware<String> auditorProvider(){
+return () -> Optional.of(UUID.randomUUID().toString());}
+
+실무에서는 세션 정보나, 시큐리티 로그인 정보에서 ID 를 받는다. 
+```
+### Web 확장 도메인 컨버터 클래스
+```
+컨트롤러에서 파라미터로 넘어온 엔티티의 아이디 값을 사용해서 자동으로 리포지토리에 접근하고 필요한 값을 찾을 수 있다.
+
+@GetMapping("/members/{id}")
+public String findMember(@PathVariable("id") Member member){
+return member.getUsername();}
+
+이녀석은 일단 직관적이지 않아서 사용에 대한 의문이 있지만 사용한다면 단순 조회용으로만 써야한다.
+(트랜잭션의 범위를 넘어섰기 때문에 엔티티를 변경해도 DB 에 반영되지 않는다)
+```
+### Web 확장 - 페이징과 정렬
+```
+* 요청 파라미터로 Pageable 받기
+
+-> /members?page=0&size=3&sort=id,desc&sort=username,desc
+
+@GetMapping("/members")
+public Page<Member> list(Pageable pageable){
+Page<Member> page = memberRepository.findAll(pageable);
+return page; }
+
+-> /members?member_page=0&order_page=1
+
+public String list(
+  @Qualifier("member") Pageable memberPageable,
+  @Qualifier("order") Pageable orderPageable,...)
+
+페이징 정보가 둘 이상이면 접두사로 구분한다.
+```
+```
+* 스프링 부트 글로벌 설정
+spring.data.web.pageable.default-page-size=20 기본 페이지 사이즈
+spring.data.web.pageable.max-page-size=2000  최대 페이지 사이즈
+```
+```
+* 개별 설정 (이게 요청시 좀 더 깔끔할듯?)
+
+@RequestMapping(value = "/members_page", method = RequestMethod.GET)
+public String list(@PageableDefault(size = 12, sort = "username", direction = Sort.Direction.DESC) Pageable pageable)
+{...}
+```
+```
+* Page 내용을 DTO 로 변환 하기
+
+@GetMapping("/members")
+public Page<MemberDto> list(Pageable pageable){
+  return memberRepository.findAll(pageable).map(MemberDto::new);
+```
+## persist 와 merge 에 대해서
+```
+스프링 데이터 JPA 는 save() 메서드를 호출해서 영속화 시킬 때 새로운 엔티티의 경우 persist 를 수행하지만 새로운 엔티티가 아니라면
+merge 를 호출해서 병합을 시도한다. 
+(새로운 엔티티란? 저장할 때 식별자가 없는 엔티티를 의미한다.)
+
+* save() 호출시
+
+if(entityInformation.isNew(entity)) {
+em.persist(entity);
+return entity;       
+}else {
+return em.merge(entity);}
+```
+```
+식별자를 할당할 때 Generatedvalue 를 쓰지 않고 직접 값을 세팅해준다면 persist 가 아닌 merge(병합) 가 발생한다.
+병합이 발생하는 경우 JPA 는 DB 에 값이 있을 것이라 가정하고 select 쿼리를 이용해서 값을 찾는다.
+
+값이 없다고 판단하면 직접 식별자를 세팅한 엔티티의 값을 저장한다.
+```
+```
+* Persistable 인터페이스를 구현해서 변경 감지 피하기
+
+@Entity 
+@EntityListeners(AuditingEntityListener.class) // Auditing 사용시 세팅 
+@NoArgsConstructor
+public class Item implements Persistable<String> {
+
+@Id
+private String id;
+
+@CreatedDate
+private LocalDateTime createdDate;
+
+@Override
+public String getId() {
+return id;}
+
+@Override
+public boolean isNew() {
+return createdDate == null;}
+}
+
+Auditing 을 사용하면 등록일을 만들기(persist) 전에는 값이 없기 때문에 이것을 이용해서 null 체크를 하고 새로운 엔티티로 
+인식시키면 식별자를 직접 할당해도 새로운 엔티티로 등록할 수 있다. 
+```
+## 변경 감지와 병합에 대해서 
+
+
+
+
+
+
+
+
+
