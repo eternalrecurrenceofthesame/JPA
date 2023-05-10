@@ -342,14 +342,21 @@ public String updateItem(@ModelAttribute("form") BookForm form) {
 준영속 상태의 엔티티를 수정하려면 서비스 계층에서 식별자 값으로 엔티티를 조회한 후 영속성 상태의 값을
 수정해서 변경 감지가 발생하도록 해야한다.
 
+* Controller 
+
+@PostMapping(value = "/items/{itemId}/edit")
+public String updateItem(@ModelAttribute("form") BookForm form) {
+ 
+ itemService.updateItem(form.getId(), form.getName(), form.getPrice());
+ return "redirect:/items"; }
+
 * Service
 
 @Transactional
 public void updateItem(Long id, String name, int price) {
 
 Item item = itemRepository.findOne(id);
-findItem.change(price, name, stockQuantity);
- }
+findItem.change(price, name, stockQuantity);}
 
 값을 수정할 때는 set 으로 수정하지 않고 도메인의 의미있는 비즈니스 로직을 만들어서 수정한다.(DDD)
 ```
@@ -359,7 +366,7 @@ findItem.change(price, name, stockQuantity);
 
 변경 감지가 발생하도록 하자! 
 
-
+### 나머지 기능들 <- 교재 참고. 
 
 
 
