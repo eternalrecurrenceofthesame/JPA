@@ -33,7 +33,7 @@ static class SimpleOrderDto{
 * RestController
 
 @GetMapping("/api/fetch/simple-orders")
-public List<SimpleOrderDto> ordersV3(){
+public List<SimpleOrderDto> orders(){
         List<Order> orders = orderRepository.findAllWithMemberDelivery();
         List<SimpleOrderDto> result = orders.stream()
                 .map(o -> new SimpleOrderDto(o))
@@ -82,4 +82,79 @@ public List<Dto> findOrderDtos(){
 
 ## 컬렉션 최적화 하기 
 
-컬렉션을  조회할 때 쿼리를 최적화 하기.
+컬렉션을 조회할 때 쿼리를 최적화 하기. 컬렉션 값이 많으면 그만큼 쿼리 수가 증가한다 N + 1 의 문제가 발생할 수 있기 때문에 컬렉션을 
+
+조회할 때는 신중하게 쿼리를 작성해야 한다. 
+
+### 컬렉션을 페치 조인 해서 가져오는 쿼리
+```
+public List<Order> findAllWithItem(){
+        return em.createQuery(
+              "select distinct o from Order o" + 
+                " join fetch o.member m" +
+                " join fetch o.delivery d" +
+                " join fetch o.orderItems oi" + // 컬렉션
+                " join fetch oi.item i", Order.class) // 컬렉션 필드 조회 
+                .getResultList();
+
+주문을 가져오면서 컬렉션으로 인한 중복 Order 를 distinct 로 제거하고 관련 필드(컬렉션의 필드 포함) 값들을 모두 페치조인으로 가져온다.
+이로써 SQL 을 한번만 실행할 수 있다.
+
+하지만 컬렉션을 페치 조인하면 **페이징**을 할 수 없다. 컬렉션 값을 페이징 시도하면 애플리케이션 메모리에서 모든 데이터베이스 값을 읽어서
+페이징일 시도하기 때문에 위험하다. 또한 컬렉션 페치 조인은 1 개의 필드 값만 사용할 수있다.
+```
+### 컬렉션 최적화 하기 1 
+
+대부분의 페이징 + 컬렉션 엔티티 조회는 이 방법으로 해결할 수 있다. 
+
+```
+앞서 설명 했듯이 컬렉션을 페치조인 하면 페이징을 할 수 없다. 일대 다 의 관계에서는 페이징을 일 엔티티를 기준으로 하는데 컬렉션을 가져오면 
+일 엔티티에 여러 개의 값이 포함되면 컬렉션인 다를 기준으로 페이징 되어 버린다.
+```
+```
+* 컬렉션 조회 로직
+
+@GetMapping("/api/orders")
+public List<OrderDto> orders(@RequestParam(value = "offset", defaultValue = "0") int offset,
+                             @RequestParam(value = "limit", defaultValue = "100") int limit){
+
+List<Order> orders = orderRepository.findAllWithMemberDelivery(offset, limit);
+List<OrderDto> result = orders.stream().map(o -> new OrderDto(o)).collect(toList());
+
+return result;     }
+```
+```
+* 컬렉션 최적화 하기
+
+public List<Order> findAllWithMemberDelivery(int offset, int limit){
+        return em.createQuery(
+              "select o from Order o" + 
+              " join fetch o.member m" +
+              "join fetch o.delivery d" , Order.class)
+              .setFirstResult(offset)
+              .setMaxResults(limit).getResultList(); }
+              
+ToOne 관계를 페치 조인으로 한번에 가져온 후 컬렉션을 지연 로딩으로 조회하면 된다. 컬렉션 조회시 배치 사이즈를 설정하면 한번의 쿼리로 
+필요한 양 만큼 가져올 수 있고, 이렇게하면 1 + 1 총 두 번의 쿼리로 컬렉션을 가져오면서 컬렉션 페이징까지 할 수 있다.
+```
+```
+* 컬렉션 배치 사이즈 설정
+
+spring:
+  jpa:
+    properties:
+      hibernate:
+        default_batch_fetch_size: 1000 // 권장 사이즈 100 ~ 1000 
+
+SQL IN 절을 사용해서 컬렉션 수 만큼 인 쿼리를 사용해서 데이터를 가져온다. 1000 으로 설정하는 것이 성능상 좋다. 
+데이터베이스에 과부하를 주지 않는 선에서 설정한다. 
+
+배치 사이즈를 개별 설정하려면 컬렉션 필드나 엔티티에 @BatchSize 옵션을 사용해서 세밀하게 조정할 수있다.
+```
+### 컬렉션 최적화 하기 (DTO 를 이용한 직접 조회)
+
+#### DTO 조회 1 
+```
+* dtoquery 1 참고 
+```
+
