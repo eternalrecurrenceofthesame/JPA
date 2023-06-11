@@ -196,9 +196,81 @@ NONE 은 조회후 데이터를 수정해야 버전 체크를 하지만 이 경�
 (지금까지 사용해본적이 없기 때문에 따로 설명하지는 않겠음. 필요시 참고 706 p)
 ```
 
+## List + @OrderColumn 615 p
+```
+@Entity
+public class Board {
+...
+@OneToMany(mappedBy = "board")
+@OrderColumn(name = "POSITION")
+private List<Comment> comments = new ArrayList<Comment>();
+...
+}
 
+@Entity
+public class Comment {
+...
+@ManyToOne
+@JoinColumn(name = "BOARD_ID")
+private Board board;
+...
+}
+```
+```
+List 컬렉션과 @OrderColumn 을 같이 사용하면 컬렉션의 값을 컬렉션 순서대로 보관한다.
 
+COMMENT TABLE
+1(COMMENT_ID PK) | 댓글1(COMMENT) | 1(BOARD_ID  FK) | 0(POSITION) 
+2(COMMENT_ID PK) | 댓글2(COMMENT) | 1(BOARD_ID  FK) | 1(POSITION) 
 
+테이블 연관관계의 주인인 Comment 는 FK 와 동시에 리스트 컬렉션의 위치 값을 보관하기 때문에 
+편리하게 보일 수도 있지만 실무에서 사용하기에는 단점이 많다.
+```
+```
+- 단점
+
+COMMENT 에서 POSITION 값을 가져올 때 그리고 BOARD 컬렉션을 삭제할 때 추가 쿼리가 발생한다.
+POSITION 중간에 값이 없으면 조회한 List 에 null 값이 보관돼서 NPE 가 발생할 수 있다 즉
+COMMENT 데이터을 삭제할 때마다 POSITION 값을 각각 하나씩 줄이는 작업을 해줘야한다 .. 
+
+https://www.nowwatersblog.com/jpa/ch14/14-1 참고 
+```
+### 해결책 @OrderBy 를 사용하라! 
+```
+@Entity
+public class Team{
+
+@Id @GenreatedValue
+private Long id;
+private String name;
+
+@OneToMany(mappedBy = "team)
+@OrderBy("username desc, id asc") // username 기준 내림차순으로 정렬, id 로 오름차순 정렬
+private Set<Member> members = new HashSet<Member>();
+...
+}
+
+@Entity
+public class Member{
+
+@Id @GenreatedValue
+private Long id;
+
+@Column(name = "MEMBER_NAME")
+private String username;
+
+@ManyToOne
+private Team team;
+...
+}
+```
+```
+select m * from member m 
+where m.team_id = ?
+order by m.member_name desc, m.id asc
+
+특정 팀에 속한 멤버를 조회할 때 내림차순과 오름차순을 적용해서 값을 가져온다.
+```
 
 
 
