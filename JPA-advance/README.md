@@ -191,11 +191,47 @@ NONE 은 조회후 데이터를 수정해야 버전 체크를 하지만 이 경�
 증가하지 않는다 따라서 이 옵션을 사용하면 루트 엔티티의 버전 정보까지 강제로 증가시킬 수 있다.
 ```
 #### JPA 비관적 락 
-```
-데이터베이스 트랜잭션 락 메커니즘에 의존하는 방법으로 버전 정보는 따로 사용하지 않는다.
-(지금까지 사용해본적이 없기 때문에 따로 설명하지는 않겠음. 필요시 참고 706 p)
-```
 
+PESSIMISTIC LOCK 은 데이터베이스 트랜잭션 락 메커니즘에 의존하는 방법으로 주로 SQL 쿼리에 select for update 
+
+(수정 중 read write 불가) 구문을 사용하며 버전 정보는 따로 사용하지 않는다. 
+```
+* PESSIMISTIC_WRITE (일반적인 비관적 락)
+
+select for update 를 사용해서 락을 건다. (락이 없으면 read, write 불가능) NON-REPEATABLE READ
+(유령 읽기) 를 방지할 수 있다.
+```
+```
+* PESSIMISTIC_READ
+
+MySQL 의 lock in share mode 를 의미한다 다른 트랜잭션에서 수정할 수 없지만 읽을 수는 있다.
+(보통 잘 사용 안한다.)
+```
+```
+* PESSIMISTIC_FORCE_INCREMENT
+
+비관적 락 중 유일하게 버전 정보를 사용한다. nowait 을 지원하는 데이터베이스에 대해
+for update nowait 옵션을 적용하고 nowait 을 지원하지 않으면 update 를 사용한다.
+
+(for update nowait - 락을 획득하지 못하면 바로 업데이트를 실패한다. ORACLE) 
+```
+```
+* 비관적 락과 타입 아웃
+
+비관적 락을 사용하면 유령읽기 방지, 수정 불가, nowait 기능을 사용할 수 있다 하지만 락을 획득할 때까지
+무한정 대기하는 문제가 발생한다. 이를 방지하기 위해 타임아웃 시간을 줄 수 있다.
+
+ex)
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @QueryHints({
+            @QueryHint(name = "javax.persistence.lock.timeout", value = "3000")
+    })
+    @Query("select m from Member m where m.id = :id")
+    Optional<Member> findByIdForUpdate(@Param("id") MemberId memberId);
+
+쿼리 힌트로 타임아웃 시간을 3 초 설정한다.
+```
 ## List + @OrderColumn 615 p
 ```
 @Entity
